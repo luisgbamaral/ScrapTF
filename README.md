@@ -2,6 +2,8 @@
 
 Uma biblioteca Python robusta e modular para fazer scraping de dados de processos judiciais do Supremo Tribunal Federal (STF) com suporte a armazenamento em Parquet e integração com basedosdados.org.
 
+<img src="https://github.com/luisgbamaral/ScrapTF/blob/main/ScraperTF.png">
+
 ## 🚀 Características Principais
 
 - **Estratégia Híbrida**: Consulta primeiro o dataset "Corte Aberta" via basedosdados.org, com fallback para scraping direto
@@ -302,12 +304,6 @@ print(relatores.head(10))
 ## 📄 Licença
 
 Este projeto está licenciado sob a Licença MIT - veja o arquivo [LICENSE](LICENSE) para detalhes.
-
-## 🆘 Suporte
-
-- 📧 Email: contact@stfscraper.dev
-- 🐛 Issues: [GitHub Issues](https://github.com/stf-scraper/stf-scraper/issues)
-- 📚 Documentação: [ReadTheDocs](https://stf-scraper.readthedocs.io/)
 
 ## 🏆 Créditos
 
