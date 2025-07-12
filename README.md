@@ -305,10 +305,6 @@ print(relatores.head(10))
 
 Este projeto está licenciado sob a Licença MIT - veja o arquivo [LICENSE](LICENSE) para detalhes.
 
-## 🏆 Créditos
-
-Desenvolvido com ❤️ para a comunidade jurídica brasileira.
-
 ---
 
 **Aviso Legal**: Este software é fornecido "como está" e destina-se apenas a fins educacionais e de pesquisa. Os usuários são responsáveis por cumprir os termos de uso do portal STF e todas as leis aplicáveis.
