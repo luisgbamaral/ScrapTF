@@ -177,7 +177,7 @@ class HTMLParser:
 
                 # Filtrar texto útil
                 if len(text) > 200 and not re.match(r'^(menu|navegação)', text, re.IGNORECASE):
-                    return text[:5000]  # Limitar tamanho
+                    return text
 
         # Fallback: buscar maior bloco de texto
         all_divs = soup.find_all('div')
@@ -187,7 +187,7 @@ class HTMLParser:
                 key=len,
                 default=""
             )
-            return longest_text[:5000] if len(longest_text) > 200 else None
+            return longest_text if len(longest_text) > 200 else None
 
         return None
 
