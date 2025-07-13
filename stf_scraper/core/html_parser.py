@@ -1,321 +1,206 @@
-"""
-Parser HTML para extração de dados de páginas do STF.
-"""
+"""Parser HTML otimizado para extração de dados do STF."""
 
-from typing import Dict, List, Optional, Any, Union
-from bs4 import BeautifulSoup, Tag
+from bs4 import BeautifulSoup
+from typing import Dict, List, Optional, Any
 import re
-from urllib.parse import urljoin, urlparse
+from datetime import datetime
 
 
 class HTMLParser:
-    """Parser especializado para páginas do portal do STF."""
+    """Parser HTML otimizado com foco em performance e simplicidade."""
 
-    def __init__(self, base_url: str = "https://portal.stf.jus.br"):
-        """
-        Inicializa o parser HTML.
-
-        Args:
-            base_url: URL base do portal STF
-        """
-        self.base_url = base_url
-        self.process_data = {}
+    def __init__(self):
+        # Padrões regex compilados para performance
+        self._date_pattern = re.compile(r'\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b')
+        self._ementa_pattern = re.compile(r'EMENTA[:\s]*(.*?)(?=\n\n|ACÓRDÃO|VOTO|$)', re.IGNORECASE | re.DOTALL)
 
     def parse_process_page(self, html_content: str, process_number: str) -> Dict[str, Any]:
-        """
-        Extrai dados da página principal do processo.
-
-        Args:
-            html_content: Conteúdo HTML da página
-            process_number: Número do processo
-
-        Returns:
-            Dict com dados extraídos do processo
-        """
+        """Extrai dados de uma página de processo do STF."""
         soup = BeautifulSoup(html_content, 'lxml')
 
-        data = {
-            'processo_numero': process_number,
-            'classe_processual': None,
-            'assunto': None,
-            'relator': None,
-            'origem': None,
-            'partes': [],
-            'movimentacoes': [],
-            'documentos': [],
-            'decisoes': [],
-            'texto_integral': None,
-            'url_processo': None,
-            'data_autuacao': None,
-            'status': None
-        }
-
         try:
-            # Extrair informações básicas do processo
+            data = {
+                'processo_numero': process_number,
+                'data_extracao': datetime.now().isoformat(),
+                'sucesso_extracao': True
+            }
+
+            # Extrair dados básicos
             data.update(self._extract_basic_info(soup))
 
-            # Extrair partes do processo
+            # Extrair partes
             data['partes'] = self._extract_parties(soup)
 
-            # Extrair movimentações
-            data['movimentacoes'] = self._extract_movements(soup)
+            # Extrair movimentações (últimas 10)
+            data['movimentacoes'] = self._extract_movements(soup)[:10]
 
-            # Extrair documentos
-            data['documentos'] = self._extract_documents(soup)
+            # Extrair texto integral
+            full_text = self._extract_full_text(soup)
+            if full_text:
+                data['texto_integral'] = full_text
+                data['ementa'] = self._extract_ementa(full_text)
 
-            # Extrair decisões
-            data['decisoes'] = self._extract_decisions(soup)
-
-            # Extrair texto integral (se disponível na página)
-            data['texto_integral'] = self._extract_full_text(soup)
+            return data
 
         except Exception as e:
-            # Em caso de erro, retorna dados básicos
-            data['erro_parsing'] = str(e)
+            return {
+                'processo_numero': process_number,
+                'erro': str(e),
+                'sucesso_extracao': False,
+                'data_extracao': datetime.now().isoformat()
+            }
 
-        return data
-
-    def _extract_basic_info(self, soup: BeautifulSoup) -> Dict[str, Any]:
-        """Extrai informações básicas do processo."""
+    def _extract_basic_info(self, soup: BeautifulSoup) -> Dict[str, Optional[str]]:
+        """Extrai informações básicas otimizadas."""
         info = {}
 
-        # Classe processual
-        classe_elem = soup.find('span', {'class': 'classe-processual'}) or                      soup.find('td', string=re.compile(r'Classe.*:')) or                      soup.find('strong', string=re.compile(r'Classe'))
-        if classe_elem:
-            info['classe_processual'] = self._extract_text_after_label(classe_elem)
+        # Dicionário de campos e possíveis labels
+        fields = {
+            'classe_processual': ['Classe:', 'Classe Processual:', 'Tipo:'],
+            'relator': ['Relator:', 'Ministro Relator:', 'Min. Relator:'],
+            'assunto': ['Assunto:', 'Assuntos:', 'Matéria:'],
+            'status': ['Status:', 'Situação:', 'Estado:'],
+            'data_autuacao': ['Data de Autuação:', 'Autuação:'],
+            'origem': ['Origem:', 'Órgão de Origem:']
+        }
 
-        # Assunto
-        assunto_elem = soup.find('span', {'class': 'assunto'}) or                       soup.find('td', string=re.compile(r'Assunto.*:')) or                       soup.find('strong', string=re.compile(r'Assunto'))
-        if assunto_elem:
-            info['assunto'] = self._extract_text_after_label(assunto_elem)
-
-        # Relator
-        relator_elem = soup.find('span', {'class': 'relator'}) or                       soup.find('td', string=re.compile(r'Relator.*:')) or                       soup.find('strong', string=re.compile(r'Relator'))
-        if relator_elem:
-            info['relator'] = self._extract_text_after_label(relator_elem)
-
-        # Origem
-        origem_elem = soup.find('span', {'class': 'origem'}) or                      soup.find('td', string=re.compile(r'Origem.*:')) or                      soup.find('strong', string=re.compile(r'Origem'))
-        if origem_elem:
-            info['origem'] = self._extract_text_after_label(origem_elem)
-
-        # Data de autuação
-        data_elem = soup.find('span', {'class': 'data-autuacao'}) or                    soup.find('td', string=re.compile(r'Data.*Autuação.*:')) or                    soup.find('strong', string=re.compile(r'Data.*Autuação'))
-        if data_elem:
-            info['data_autuacao'] = self._extract_text_after_label(data_elem)
-
-        # Status
-        status_elem = soup.find('span', {'class': 'status'}) or                      soup.find('td', string=re.compile(r'Status.*:')) or                      soup.find('strong', string=re.compile(r'Status'))
-        if status_elem:
-            info['status'] = self._extract_text_after_label(status_elem)
+        # Buscar cada campo
+        for field, labels in fields.items():
+            info[field] = self._find_text_after_labels(soup, labels)
 
         return info
 
-    def _extract_text_after_label(self, element: Tag) -> Optional[str]:
-        """Extrai texto após um label/elemento."""
-        if not element:
-            return None
+    def _find_text_after_labels(self, soup: BeautifulSoup, labels: List[str]) -> Optional[str]:
+        """Busca texto após labels específicos."""
+        for label in labels:
+            # Buscar elementos que contêm o label
+            elements = soup.find_all(text=re.compile(label, re.IGNORECASE))
 
-        # Se o elemento contém o texto completo
-        text = element.get_text(strip=True)
-        if ':' in text:
-            return text.split(':', 1)[1].strip()
+            for element in elements:
+                if element.parent:
+                    text = element.parent.get_text(strip=True)
 
-        # Procura no próximo elemento
-        next_elem = element.find_next_sibling()
-        if next_elem:
-            return next_elem.get_text(strip=True)
+                    # Extrair texto após o label
+                    pattern = re.compile(f'{re.escape(label)}\s*', re.IGNORECASE)
+                    result = pattern.sub('', text).strip()
 
-        # Procura no elemento pai
-        parent = element.parent
-        if parent:
-            parent_text = parent.get_text(strip=True)
-            if ':' in parent_text:
-                return parent_text.split(':', 1)[1].strip()
+                    if result and result != text:
+                        return result[:200]  # Limitar tamanho
 
-        return text
-
-    def _extract_parties(self, soup: BeautifulSoup) -> List[Dict[str, str]]:
-        """Extrai informações das partes do processo."""
-        parties = []
-
-        # Procura seções de partes
-        party_sections = soup.find_all(['div', 'table'], class_=re.compile(r'part|polo'))
-
-        for section in party_sections:
-            # Procura por padrões comuns de identificação de partes
-            party_rows = section.find_all('tr') or section.find_all('div')
-
-            for row in party_rows:
-                text = row.get_text(strip=True)
-
-                # Identifica tipo de parte
-                if re.search(r'(requerente|autor|impetrante)', text, re.I):
-                    party_type = 'Requerente'
-                elif re.search(r'(requerido|réu|impetrado)', text, re.I):
-                    party_type = 'Requerido'
-                elif re.search(r'(advogado|procurador)', text, re.I):
-                    party_type = 'Advogado'
-                else:
-                    continue
-
-                # Extrai nome
-                name_match = re.search(r':\s*([^(]+)', text)
-                name = name_match.group(1).strip() if name_match else text
-
-                parties.append({
-                    'tipo': party_type,
-                    'nome': name,
-                    'texto_completo': text
-                })
-
-        return parties
-
-    def _extract_movements(self, soup: BeautifulSoup) -> List[Dict[str, str]]:
-        """Extrai movimentações do processo."""
-        movements = []
-
-        # Procura tabela ou lista de movimentações
-        movement_tables = soup.find_all(['table', 'div'], class_=re.compile(r'moviment|historic'))
-
-        for table in movement_tables:
-            rows = table.find_all('tr')[1:]  # Pula header
-
-            for row in rows:
-                cells = row.find_all(['td', 'div'])
-                if len(cells) >= 2:
-                    date = cells[0].get_text(strip=True)
-                    description = cells[1].get_text(strip=True)
-
-                    movements.append({
-                        'data': date,
-                        'descricao': description,
-                        'texto_completo': row.get_text(strip=True)
-                    })
-
-        return movements
-
-    def _extract_documents(self, soup: BeautifulSoup) -> List[Dict[str, str]]:
-        """Extrai lista de documentos."""
-        documents = []
-
-        # Procura links para documentos
-        doc_links = soup.find_all('a', href=re.compile(r'\.pdf|documento|anexo'))
-
-        for link in doc_links:
-            href = link.get('href', '')
-            if href:
-                documents.append({
-                    'titulo': link.get_text(strip=True),
-                    'url': urljoin(self.base_url, href),
-                    'tipo': self._identify_document_type(href)
-                })
-
-        return documents
-
-    def _extract_decisions(self, soup: BeautifulSoup) -> List[Dict[str, str]]:
-        """Extrai decisões do processo."""
-        decisions = []
-
-        # Procura seções de decisões
-        decision_sections = soup.find_all(['div', 'section'], class_=re.compile(r'decisao|acordao|sentenca'))
-
-        for section in decision_sections:
-            text = section.get_text(strip=True)
-            if len(text) > 100:  # Filtra textos muito pequenos
-                decisions.append({
-                    'texto': text,
-                    'tipo': self._identify_decision_type(text)
-                })
-
-        return decisions
-
-    def _extract_full_text(self, soup: BeautifulSoup) -> Optional[str]:
-        """Extrai texto integral se disponível na página."""
-        # Procura por conteúdo principal
-        main_content = soup.find(['div', 'section'], class_=re.compile(r'content|main|texto'))
-
-        if main_content:
-            # Remove scripts, estilos e elementos desnecessários
-            for elem in main_content.find_all(['script', 'style', 'nav', 'header', 'footer']):
-                elem.decompose()
-
-            text = main_content.get_text(separator='\n', strip=True)
-
-            # Filtra texto muito curto
-            if len(text) > 500:
-                return text
+                    # Tentar próximo elemento
+                    next_elem = element.parent.find_next_sibling()
+                    if next_elem:
+                        sibling_text = next_elem.get_text(strip=True)
+                        if sibling_text:
+                            return sibling_text[:200]
 
         return None
 
-    def _identify_document_type(self, url: str) -> str:
-        """Identifica o tipo de documento pela URL."""
-        url_lower = url.lower()
+    def _extract_parties(self, soup: BeautifulSoup) -> Dict[str, List[str]]:
+        """Extrai partes do processo de forma otimizada."""
+        parties = {'requerentes': [], 'requeridos': [], 'interessados': []}
 
-        if 'acordao' in url_lower:
-            return 'Acórdão'
-        elif 'decisao' in url_lower:
-            return 'Decisão'
-        elif 'despacho' in url_lower:
-            return 'Despacho'
-        elif 'sentenca' in url_lower:
-            return 'Sentença'
-        elif 'peticao' in url_lower:
-            return 'Petição'
-        elif '.pdf' in url_lower:
-            return 'PDF'
-        else:
-            return 'Documento'
+        # Buscar seções de partes
+        party_sections = soup.find_all(['div', 'table'], 
+                                     class_=re.compile(r'part|polo', re.IGNORECASE))
 
-    def _identify_decision_type(self, text: str) -> str:
-        """Identifica o tipo de decisão pelo texto."""
-        text_lower = text.lower()
+        for section in party_sections[:5]:  # Limitar busca
+            text = section.get_text()
 
-        if 'acórdão' in text_lower:
-            return 'Acórdão'
-        elif 'decisão monocrática' in text_lower:
-            return 'Decisão Monocrática'
-        elif 'despacho' in text_lower:
-            return 'Despacho'
-        elif 'sentença' in text_lower:
-            return 'Sentença'
-        else:
-            return 'Decisão'
+            # Categorizar por palavras-chave
+            if re.search(r'requerente|autor|impetrante', text, re.IGNORECASE):
+                parties['requerentes'].extend(self._extract_names_from_section(section))
+            elif re.search(r'requerido|réu|impetrado', text, re.IGNORECASE):
+                parties['requeridos'].extend(self._extract_names_from_section(section))
+            elif re.search(r'interessado|terceiro', text, re.IGNORECASE):
+                parties['interessados'].extend(self._extract_names_from_section(section))
 
-    def clean_text(self, text: str) -> str:
-        """Limpa e normaliza texto extraído."""
-        if not text:
-            return ""
+        return parties
 
-        # Remove múltiplos espaços e quebras de linha
-        text = re.sub(r'\s+', ' ', text)
-        text = re.sub(r'\n+', '\n', text)
+    def _extract_names_from_section(self, section) -> List[str]:
+        """Extrai nomes de uma seção de forma otimizada."""
+        text = section.get_text()
+        lines = [line.strip() for line in text.split('\n') if line.strip()]
 
-        # Remove caracteres especiais desnecessários
-        text = re.sub(r'[\r\t]', ' ', text)
+        names = []
+        for line in lines[:3]:  # Máximo 3 nomes por seção
+            # Filtrar linhas que parecem ser nomes
+            if (len(line) > 5 and 
+                not re.match(r'^(requerente|requerido|interessado)s?\s*:', line, re.IGNORECASE) and
+                not re.match(r'^\d+$', line)):
+                names.append(line[:100])  # Limitar tamanho
 
-        return text.strip()
+        return names
 
-    def extract_process_urls(self, search_results_html: str) -> List[str]:
-        """
-        Extrai URLs de processos de uma página de resultados de busca.
+    def _extract_movements(self, soup: BeautifulSoup) -> List[Dict[str, str]]:
+        """Extrai movimentações de forma otimizada."""
+        movements = []
 
-        Args:
-            search_results_html: HTML da página de resultados
+        # Buscar containers de movimentações
+        containers = soup.find_all(['table', 'div'], 
+                                 class_=re.compile(r'moviment|tramit', re.IGNORECASE))
 
-        Returns:
-            Lista de URLs de processos
-        """
-        soup = BeautifulSoup(search_results_html, 'lxml')
-        urls = []
+        for container in containers[:2]:  # Máximo 2 containers
+            rows = container.find_all(['tr', 'div'])
 
-        # Procura links para páginas de processos
-        process_links = soup.find_all('a', href=re.compile(r'processo|detalhes'))
+            for row in rows:
+                text = row.get_text(strip=True)
+                date_match = self._date_pattern.search(text)
 
-        for link in process_links:
-            href = link.get('href', '')
-            if href and 'processo' in href:
-                full_url = urljoin(self.base_url, href)
-                urls.append(full_url)
+                if date_match and len(text) > 20:  # Filtrar textos muito curtos
+                    movements.append({
+                        'data': date_match.group(),
+                        'descricao': text.replace(date_match.group(), '').strip()[:300]
+                    })
 
-        return urls
+                    if len(movements) >= 10:  # Limitar quantidade
+                        break
+
+            if len(movements) >= 10:
+                break
+
+        return movements
+
+    def _extract_full_text(self, soup: BeautifulSoup) -> Optional[str]:
+        """Extrai texto integral de forma otimizada."""
+        # Buscar seções de texto principal
+        text_selectors = [
+            {'class_': re.compile(r'ementa|texto|decisao|conteudo', re.IGNORECASE)},
+            {'id': re.compile(r'ementa|texto|decisao', re.IGNORECASE)}
+        ]
+
+        for selector in text_selectors:
+            sections = soup.find_all(['div', 'section'], **selector)
+
+            for section in sections:
+                text = section.get_text(strip=True, separator='\n')
+
+                # Filtrar texto útil
+                if len(text) > 200 and not re.match(r'^(menu|navegação)', text, re.IGNORECASE):
+                    return text[:5000]  # Limitar tamanho
+
+        # Fallback: buscar maior bloco de texto
+        all_divs = soup.find_all('div')
+        if all_divs:
+            longest_text = max(
+                (div.get_text(strip=True) for div in all_divs),
+                key=len,
+                default=""
+            )
+            return longest_text[:5000] if len(longest_text) > 200 else None
+
+        return None
+
+    def _extract_ementa(self, full_text: str) -> Optional[str]:
+        """Extrai ementa do texto completo."""
+        if not full_text:
+            return None
+
+        # Buscar padrão de ementa
+        match = self._ementa_pattern.search(full_text)
+        if match:
+            return match.group(1).strip()[:1000]  # Limitar tamanho
+
+        # Fallback: primeiro parágrafo
+        paragraphs = full_text.split('\n\n')
+        return paragraphs[0][:500] if paragraphs else None

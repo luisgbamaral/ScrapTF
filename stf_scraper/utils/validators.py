@@ -1,125 +1,73 @@
-"""
-Módulo de validação para números de processos CNJ e outras validações.
-"""
+"""Validadores para números de processo CNJ."""
 
 import re
-from typing import List, Tuple
+from typing import Union
 
 
 class CNJValidator:
-    """Validador para números de processos no padrão CNJ."""
+    """Validador otimizado para números CNJ."""
 
-    CNJ_PATTERN = re.compile(r'^\d{7}-\d{2}\.\d{4}\.\d{1}\.\d{2}\.\d{4}$')
+    # Padrão regex compilado para performance
+    _CNJ_PATTERN = re.compile(r'^(\d{7})-?(\d{2})\.?(\d{4})\.?(\d)\.?(\d{2})\.?(\d{4})$')
+    _DIGITS_ONLY = re.compile(r'\D')
 
-    @staticmethod
-    def validate_cnj_number(process_number: str) -> bool:
-        """
-        Valida se um número de processo está no formato CNJ correto.
-
-        Args:
-            process_number: Número do processo no formato CNJ
-
-        Returns:
-            bool: True se válido, False caso contrário
-        """
-        if not isinstance(process_number, str):
+    @classmethod
+    def validate_cnj_number(cls, cnj_number: Union[str, int]) -> bool:
+        """Valida número CNJ usando algoritmo oficial."""
+        if not cnj_number:
             return False
 
-        # Remove espaços em branco
-        process_number = process_number.strip()
+        # Limpar e validar formato
+        clean_number = cls._DIGITS_ONLY.sub('', str(cnj_number))
 
-        # Verifica formato básico
-        if not CNJValidator.CNJ_PATTERN.match(process_number):
+        if len(clean_number) != 20:
             return False
 
-        # Validação do dígito verificador
-        return CNJValidator._validate_check_digit(process_number)
+        # Extrair componentes
+        sequential = clean_number[:7]
+        dv = clean_number[7:9]
+        year = clean_number[9:13]
+        segment = clean_number[13:14]
+        court = clean_number[14:16]
+        origin = clean_number[16:20]
 
-    @staticmethod
-    def _validate_check_digit(process_number: str) -> bool:
-        """Valida o dígito verificador do número CNJ."""
+        # Validar ano
         try:
-            # Remove pontos e hífens
-            digits = re.sub(r'[.-]', '', process_number)
-
-            # Separa o número sequencial e o dígito verificador
-            sequential = digits[:7]
-            check_digit = int(digits[7:9])
-            year = digits[9:13]
-            segment = digits[13:14]
-            court = digits[14:16]
-            origin = digits[16:20]
-
-            # Calcula o dígito verificador
-            full_number = sequential + year + segment + court + origin
-            remainder = int(full_number) % 97
-            calculated_digit = 98 - remainder
-
-            return calculated_digit == check_digit
-
-        except (ValueError, IndexError):
+            year_int = int(year)
+            if not (1998 <= year_int <= 2030):  # Range realista
+                return False
+        except ValueError:
             return False
 
-    @staticmethod
-    def clean_process_number(process_number: str) -> str:
-        """
-        Limpa e formata um número de processo CNJ.
+        # Calcular dígito verificador
+        number_base = sequential + year + segment + court + origin
+        weights = [2, 3, 4, 5, 6, 7, 8, 9]
 
-        Args:
-            process_number: Número do processo
+        total = sum(
+            int(digit) * weights[i % len(weights)]
+            for i, digit in enumerate(reversed(number_base))
+        )
 
-        Returns:
-            str: Número formatado ou string vazia se inválido
-        """
-        if not isinstance(process_number, str):
-            return ""
+        calculated_dv = 98 - (total % 97)
 
-        # Remove espaços e caracteres especiais desnecessários
-        cleaned = re.sub(r'[^\d.-]', '', process_number.strip())
-
-        # Se não tem formatação, tenta adicionar
-        if re.match(r'^\d{20}$', cleaned):
-            cleaned = f"{cleaned[:7]}-{cleaned[7:9]}.{cleaned[9:13]}.{cleaned[13:14]}.{cleaned[14:16]}.{cleaned[16:20]}"
-
-        return cleaned if CNJValidator.validate_cnj_number(cleaned) else ""
-
-    @staticmethod
-    def validate_process_list(process_list: List[str]) -> Tuple[List[str], List[str]]:
-        """
-        Valida uma lista de números de processo CNJ.
-
-        Args:
-            process_list: Lista de números de processo
-
-        Returns:
-            Tuple[List[str], List[str]]: (válidos, inválidos)
-        """
-        valid_processes = []
-        invalid_processes = []
-
-        for process in process_list:
-            cleaned = CNJValidator.clean_process_number(process)
-            if cleaned:
-                valid_processes.append(cleaned)
-            else:
-                invalid_processes.append(process)
-
-        return valid_processes, invalid_processes
-
-
-class URLValidator:
-    """Validador para URLs e paths de saída."""
-
-    @staticmethod
-    def is_s3_path(path: str) -> bool:
-        """Verifica se um path é um bucket S3."""
-        return isinstance(path, str) and path.startswith('s3://')
-
-    @staticmethod
-    def is_valid_output_path(path: str) -> bool:
-        """Valida se um path de saída é válido."""
-        if not isinstance(path, str) or not path.strip():
+        try:
+            return calculated_dv == int(dv)
+        except ValueError:
             return False
 
-        # Aceita paths S3 ou locais
-        return URLValidator.is_s3_path(path) or bool(path.strip())
+    @classmethod
+    def format_cnj_number(cls, cnj_number: Union[str, int]) -> str:
+        """Formata número CNJ no padrão visual."""
+        clean_number = cls._DIGITS_ONLY.sub('', str(cnj_number))
+
+        if len(clean_number) != 20:
+            return str(cnj_number)
+
+        return (f"{clean_number[:7]}-{clean_number[7:9]}."
+                f"{clean_number[9:13]}.{clean_number[13:14]}."
+                f"{clean_number[14:16]}.{clean_number[16:20]}")
+
+    @classmethod
+    def clean_cnj_number(cls, cnj_number: Union[str, int]) -> str:
+        """Remove formatação do número CNJ."""
+        return cls._DIGITS_ONLY.sub('', str(cnj_number))
