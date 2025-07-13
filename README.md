@@ -1,10 +1,12 @@
-# STF Scraper 2.0
+# ScrapTF
 
 ![Python](https://img.shields.io/badge/python-3.8+-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Status](https://img.shields.io/badge/status-stable-brightgreen.svg)
 
 **Biblioteca Python otimizada para extração automatizada de dados de processos do Supremo Tribunal Federal (STF).**
+
+<img src="https://github.com/luisgbamaral/ScrapTF/blob/main/ScraperTF.png">
 
 ## 🚀 Instalação
 
@@ -178,15 +180,6 @@ for i in range(0, len(processos), 100):
     df = scraper.scrape_processes(lote)
     df.to_parquet(f"lote_{i//100}.parquet")
 ```
-
-## 📝 Changelog
-
-### v2.0.0
-- ✅ Remoção de dependências externas desnecessárias
-- ✅ Parser HTML otimizado
-- ✅ Sistema de logs essenciais
-- ✅ Performance melhorada
-- ✅ Código limpo e manutenível
 
 ## 📄 Licença
 
